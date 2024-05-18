@@ -1,0 +1,23 @@
+services:
+  server:
+    environment:
+      FRONTEND_URL: "https://80-${GITPOD_WORKSPACE_ID}.${GITPOD_WORKSPACE_CLUSTER_HOST}"
+      BACKEND_URL: "https://5050-${GITPOD_WORKSPACE_ID}.${GITPOD_WORKSPACE_CLUSTER_HOST}"
+    build: ./app
+    ports:
+      - "5050:5050"
+    volumes:
+      - ./server:/server
+  app:
+    environment:
+      REACT_APP_BACKEND_URL: "https://5050-${GITPOD_WORKSPACE_ID}.${GITPOD_WORKSPACE_CLUSTER_HOST}"
+    build: ./app
+    ports:
+      - "80:80"
+    volumes:
+      - ./app:/app
+
+networks: 
+  internal-network:
+    driver: bridge
+    name: sample
