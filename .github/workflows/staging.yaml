@@ -1,7 +1,7 @@
 on:
   push:
     branches:
-      - master
+      - branch
 
 name: Deploy staging environment to Amazon ECS 
 env:

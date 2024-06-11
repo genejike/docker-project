@@ -1,0 +1,119 @@
+on:
+    push:
+      branches:
+        - master
+  
+name: Deploy to Amazon EKS
+  
+env:
+    AWS_REGION: us-east-1  # Update this to your desired region
+    CLUSTER_NAME: kube-cluster  # Update this to your desired cluster name
+jobs:
+    deploy:
+      name: Deploy
+      runs-on: ubuntu-latest
+  
+      steps:
+        - name: Checkout code
+          uses: actions/checkout@v3
+  
+        - name: Configure AWS credentials
+          uses: aws-actions/configure-aws-credentials@v4
+          with:
+            aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+            aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+            aws-region: ${{ secrets.AWS_REGION }}
+  
+        - name: Install kubectl
+          run: |
+            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            chmod +x ./kubectl
+            sudo mv ./kubectl /usr/local/bin/kubectl
+  
+        - name: Install eksctl
+          run: |
+            curl --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+            sudo mv /tmp/eksctl /usr/local/bin
+  
+        - name: Configure kubectl
+          run: |
+            aws eks --region ${{ secrets.AWS_REGION }} update-kubeconfig --name ${{ env.CLUSTER_NAME }}
+  
+        - name: Login to Amazon ECR
+          id: login-ecr
+          uses: aws-actions/amazon-ecr-login@v2
+  
+        - name: Build, tag, and push frontend image to Amazon ECR
+          id: build-frontend-image
+          env:
+            ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+            ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+            IMAGE_TAG: ${{ github.sha }}
+          run: |
+            docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f app/Dockerfile .
+            docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+            echo "FRONTEND_IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
+  
+        - name: Build, tag, and push backend image to Amazon ECR
+          id: build-backend-image
+          env:
+            ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+            BCK_ECR_REPOSITORY: ${{ secrets.BCK_ECR_REPOSITORY }}
+            IMAGE_TAG: ${{ github.sha }}
+          run: |
+            docker build -t $ECR_REGISTRY/$BCK_ECR_REPOSITORY:$IMAGE_TAG -f server/Dockerfile .
+            docker push $ECR_REGISTRY/$BCK_ECR_REPOSITORY:$IMAGE_TAG
+            echo "BACKEND_IMAGE_URI=$ECR_REGISTRY/$BCK_ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
+  
+        - name: Deploy to Kubernetes
+          run: |
+            # Create Kubernetes deployment files
+            cat <<EOF > k8s-deployment.yaml
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: frontend-deployment
+              labels:
+                app: frontend
+            spec:
+              replicas: 2
+              selector:
+                matchLabels:
+                  app: frontend
+              template:
+                metadata:
+                  labels:
+                    app: frontend
+                spec:
+                  containers:
+                  - name: frontend
+                    image: ${{ env.FRONTEND_IMAGE_URI }}
+                    ports:
+                    - containerPort: 80
+            ---
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: backend-deployment
+              labels:
+                app: backend
+            spec:
+              replicas: 2
+              selector:
+                matchLabels:
+                  app: backend
+              template:
+                metadata:
+                  labels:
+                    app: backend
+                spec:
+                  containers:
+                  - name: backend
+                    image: ${{ env.BACKEND_IMAGE_URI }}
+                    ports:
+                    - containerPort: 80
+            EOF
+  
+            # Apply the Kubernetes deployment
+            kubectl apply -f k8s-deployment.yaml
+  
