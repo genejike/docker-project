@@ -70,7 +70,8 @@ jobs:
         with:
           task-definition: ${{ steps.task-def.outputs.task-definition }}
           service: sample-repo
-          cluster: arn:aws:ecs:${{ env.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:cluster/sample-repo
+          cluster: arn:aws:ecs:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:cluster/sample-repo
+                   
 
       - name: Download task definition for backend container
         run: |
@@ -89,4 +90,4 @@ jobs:
         with:
           task-definition: ${{ steps.task-def-back.outputs.task-definition }}
           service: sample-repo-back
-          cluster: arn:aws:ecs:${{ env.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:cluster/sample-repo
+          cluster: arn:aws:ecs:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:cluster/sample-repo
