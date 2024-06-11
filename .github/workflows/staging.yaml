@@ -20,7 +20,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -40,8 +40,7 @@ jobs:
           # be deployed to ECS.
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f app/Dockerfile .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-        
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
 
       - name: Build, tag, and push backend image to Amazon ECR
         id: build-backend-image
@@ -50,48 +49,44 @@ jobs:
           BCK_ECR_REPOSITORY: ${{ secrets.BCK_ECR_REPOSITORY }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Build a docker container and
-          # push it to ECR so that it can
-          # be deployed to ECS.
           docker build -t $ECR_REGISTRY/$BCK_ECR_REPOSITORY:$IMAGE_TAG -f server/Dockerfile .
           docker push $ECR_REGISTRY/$BCK_ECR_REPOSITORY:$IMAGE_TAG
-          echo "::set-output name=image::$ECR_REGISTRY/$BCK_ECR_REPOSITORY:$IMAGE_TAG"
-      
+          echo "backend_image=$ECR_REGISTRY/$BCK_ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
 
       - name: Download task definition for frontend container
         run: |
-            aws ecs describe-task-definition --task-definition dockerprojectfront --query taskDefinition > task-definition.json
+          aws ecs describe-task-definition --task-definition dockerprojectfront --query taskDefinition > task-definition.json
   
       - name: Fill in the new image ID in the Amazon ECS task definition
         id: task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-            task-definition: task-definition.json
-            container-name: my_docker_project_app
-            image: ${{ steps.build-image.outputs.image }}
+          task-definition: task-definition.json
+          container-name: my_docker_project_app
+          image: ${{ env.image }}
   
-      - name: Deploy Amazon ECS task definition
+      - name: Deploy Amazon ECS task definition for frontend
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
-            task-definition: ${{ steps.task-def.outputs.task-definition }}
-            service: sample-repo
-            cluster: sample-repo
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: sample-repo
+          cluster: arn:aws:ecs:${{ env.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:cluster/sample-repo
 
       - name: Download task definition for backend container
         run: |
-              aws ecs describe-task-definition --task-definition dockerprojectbck --query taskDefinition > task-definition-2.json
+          aws ecs describe-task-definition --task-definition dockerprojectbck --query taskDefinition > task-definition-2.json
       
       - name: Fill in the new image ID in the Amazon ECS task definition
         id: task-def-back
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-            task-definition: task-definition-2.json
-            container-name: mydockerserver
-            image: ${{ steps.build-image.outputs.image }}
+          task-definition: task-definition-2.json
+          container-name: mydockerserver
+          image: ${{ env.backend_image }}
       
-      - name: Deploy Amazon ECS task definition
+      - name: Deploy Amazon ECS task definition for backend
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
-            task-definition: ${{ steps.task-def.outputs.task-definition }}
-            service: sample-repo-back
-            cluster: sample-repo
+          task-definition: ${{ steps.task-def-back.outputs.task-definition }}
+          service: sample-repo-back
+          cluster: arn:aws:ecs:${{ env.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:cluster/sample-repo
