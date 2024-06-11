@@ -115,5 +115,9 @@ jobs:
             EOF
   
             # Apply the Kubernetes deployment
-            kubectl apply -f k8s-deployment.yaml
-  
+            kubectl apply --validate=false -f k8s-deployment.yaml
+
+        - name: Debug kubectl apply
+          run: |
+            echo "Current pods:"
+            kubectl get pods
