@@ -1,7 +1,7 @@
 on:
   push:
     branches:
-      - branch
+      - main
 
 name: Deploy staging environment to Amazon ECS 
 env:
@@ -53,6 +53,27 @@ jobs:
           docker push $ECR_REGISTRY/$BCK_ECR_REPOSITORY:$IMAGE_TAG
           echo "backend_image=$ECR_REGISTRY/$BCK_ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
 
+      - name: Download task definition for backend container
+        run: |
+          aws ecs describe-task-definition --task-definition dockerprojectbck --query taskDefinition > task-definition-2.json
+      
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: task-def-back
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition-2.json
+          container-name: mydockerserver
+          image: ${{ env.backend_image }}
+      
+      - name: Deploy Amazon ECS task definition for backend
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def-back.outputs.task-definition }}
+          service: sample-repo-back
+          cluster: arn:aws:ecs:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:cluster/sample-repo
+
+
+
       - name: Download task definition for frontend container
         run: |
           aws ecs describe-task-definition --task-definition dockerprojectfront --query taskDefinition > task-definition.json
@@ -73,21 +94,4 @@ jobs:
           cluster: arn:aws:ecs:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:cluster/sample-repo
                    
 
-      - name: Download task definition for backend container
-        run: |
-          aws ecs describe-task-definition --task-definition dockerprojectbck --query taskDefinition > task-definition-2.json
-      
-      - name: Fill in the new image ID in the Amazon ECS task definition
-        id: task-def-back
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: task-definition-2.json
-          container-name: mydockerserver
-          image: ${{ env.backend_image }}
-      
-      - name: Deploy Amazon ECS task definition for backend
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: ${{ steps.task-def-back.outputs.task-definition }}
-          service: sample-repo-back
-          cluster: arn:aws:ecs:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:cluster/sample-repo
+ 
